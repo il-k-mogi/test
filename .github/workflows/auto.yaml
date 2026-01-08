@@ -25,7 +25,7 @@ jobs:
           prefixes: release/v
           ref_branch: main
           
-merge-each:
+  merge-each:
     name: Cascading Auto Merge
     runs-on: ubuntu-latest
 
