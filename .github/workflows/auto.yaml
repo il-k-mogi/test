@@ -26,7 +26,7 @@ jobs:
           ref_branch: main
           
   merge-each:
-    name: Cascading Auto Merge
+    name: Cascading Auto Merge for each
     runs-on: ubuntu-latest
 
     if: github.event.pull_request.merged == true && startsWith(github.base_ref, 'release/v')
