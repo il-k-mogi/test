@@ -4,27 +4,62 @@ on:
   pull_request:
     types:
       - closed
+    branches:
+      - 'release/v*'
 
-permissions:
-  contents: write
-  pull-requests: write
-  issues: write
+# permissions:
+#   contents: write
+#   pull-requests: write
+#   issues: write
+
+# jobs:
+#   merge:
+#     name: Cascading Auto Merge
+#     runs-on: ubuntu-latest
+
+#     # PR がマージされて、マージ先が release/v から始まるブランチ
+#     if: |
+#       github.event.pull_request.merged == true
+#       && startsWith(github.base_ref, 'release/v')
+#       && github.actor != 'github-action[bot]'
+
+#     steps:
+#       - name: Automatic Merge
+#         uses: ActionsDesk/cascading-downstream-merge@v3.1.0
+#         with:
+#           github_token: ${{ secrets.GITHUB_TOKEN }}
+#           prefixes: release/v
+#           ref_branch: main
 
 jobs:
-  merge:
-    name: Cascading Auto Merge
+  cascade:
     runs-on: ubuntu-latest
-
-    # PR がマージされて、マージ先が release/v から始まるブランチ
-    if: |
-      github.event.pull_request.merged == true
-      && startsWith(github.base_ref, 'release/v')
-      && github.actor != 'github-action[bot]'
-
     steps:
-      - name: Automatic Merge
-        uses: ActionsDesk/cascading-downstream-merge@v3.1.0
+      - name: Checkout
+        uses: actions/checkout@v4
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          prefixes: release/v
-          ref_branch: main
+          fetch-depth: 0
+
+      - name: Create PR to main and next release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          CURRENT_BRANCH=${GITHUB_REF#refs/heads/}
+          
+          # 1. mainへのマージPR作成
+          gh pr create --base main --head $CURRENT_BRANCH \
+            --title "chore: cascade merge $CURRENT_BRANCH to main" \
+            --body "Automatic cascade merge from $CURRENT_BRANCH" || echo "PR to main already exists or failed"
+
+          # 2. 次のリリースブランチを特定
+          # 全てのリリースブランチを取得してバージョン順にソート
+          NEXT_BRANCH=$(git branch -r | grep 'origin/release/v' | sed 's/  origin\///' | sort -V | sed -n "/^$CURRENT_BRANCH$/{n;p;}")
+
+          if [ -n "$NEXT_BRANCH" ]; then
+            echo "Next branch is $NEXT_BRANCH. Creating PR..."
+            gh pr create --base $NEXT_BRANCH --head $CURRENT_BRANCH \
+              --title "chore: cascade merge $CURRENT_BRANCH to $NEXT_BRANCH" \
+              --body "Automatic cascade merge from $CURRENT_BRANCH to $NEXT_BRANCH" || echo "PR to $NEXT_BRANCH already exists"
+          else
+            echo "No higher release branch found. Cascade ends here."
+          fi
