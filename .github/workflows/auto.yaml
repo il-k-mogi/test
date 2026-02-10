@@ -15,7 +15,11 @@ jobs:
     name: Cascading Auto Merge
     runs-on: ubuntu-latest
 
-    if: github.event.pull_request.merged == true && github.base_ref == 'main'
+    # PR がマージされて、マージ先が release/v から始まるブランチ
+    if: |
+      github.event.pull_request.merged == true
+      && startsWith(github.base_ref, 'release/v')
+      && github.actor != 'github-action[bot]'
 
     steps:
       - name: Automatic Merge
@@ -24,18 +28,3 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           prefixes: release/v
           ref_branch: main
-          
-  merge-each:
-    name: Cascading Auto Merge for each
-    runs-on: ubuntu-latest
-
-    if: github.event.pull_request.merged == true && startsWith(github.base_ref, 'release/v')
-
-    steps:
-      - name: Automatic Merge
-        uses: ActionsDesk/cascading-downstream-merge@v3.1.0
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          prefixes: release/v
-          ref_branch: dev/null
-          
