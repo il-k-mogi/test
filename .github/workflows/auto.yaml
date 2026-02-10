@@ -61,7 +61,7 @@ jobs:
             exit 0
           fi
 
-          echo "カスケードマージ対象ブランチ: ${NEXT_BRANCHES}"
+          echo "カスケードマージ対象ブランチ: ${NEXT_BRANCHES[@]}"
 
           ORIGINAL_PR=$(gh pr list --base ${CURRENT_BRANCH} --state merged --limit 1 --json number --jq '.[0].number')
 
