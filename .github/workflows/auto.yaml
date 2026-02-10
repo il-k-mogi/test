@@ -29,76 +29,17 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Run cascade merge
+        uses: actions/github-script@v8
         with:
-          fetch-depth: 0
-
-      - name: Find next version branch and Create PR
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          CURRENT_BRANCH: ${{ github.ref_name }}
-        run: |
-          echo "現在のブランチ: ${CURRENT_BRANCH}"
-
-          BRANCHES=$(git branch -r | grep 'origin/release/v' | sed 's/origin\///' | sort -V | xargs)
-
-          echo "リリースブランチ一覧: ${BRANCHES}"
-
-          NEXT_BRANCHES=()
-          FOUND_CURRENT=false
-
-          for BRANCH in ${BRANCHES}; do
-            if [ "${FOUND_CURRENT}" = true ]; then
-              NEXT_BRANCHES+=("${BRANCH}")
-            fi
-
-            if [ "${BRANCH}" = "${CURRENT_BRANCH}" ]; then
-              FOUND_CURRENT=true
-            fi
-          done
-
-          if [ ${#NEXT_BRANCHES[@]} -eq 0 ]; then
-            echo "次期リリースブランチが見つかりませんでした。"
-            exit 0
-          fi
-
-          echo "カスケードマージ対象ブランチ: ${NEXT_BRANCHES[@]}"
-
-          ORIGINAL_PR=$(gh pr list --base ${CURRENT_BRANCH} --state merged --limit 1 --json number --jq '.[0].number')
-
-          for NEXT_BRANCH in "${NEXT_BRANCHES[@]}"; do
-            EXISTING_PR=$(gh pr list --base ${NEXT_BRANCH} --head ${CURRENT_BRANCH} --state open --json url --jq '.[0].url')
-
-            if [ -n "${EXISTING_PR}" ]; then
-              echo "PR が既に存在します: ${EXISTING_PR}"
-              exit 0
-            fi
-
-            echo "PR を作成します: ${CURRENT_BRANCH} -> ${NEXT_BRANCH}"
-
-            gh pr create \
-              --base ${NEXT_BRANCH} \
-              --head ${CURRENT_BRANCH} \
-              --title "Cascade Merge: ${CURRENT_BRANCH} -> ${NEXT_BRANCH}" \
-              --body "This is an automated cascade merge PR triggered by a push to ${CURRENT_BRANCH}."
-
-            PR_NUMBER=$(gh pr list --base ${NEXT_BRANCH} --head ${CURRENT_BRANCH} --limit 1 --json number --jq '.[0].number')
-
-            set +e
-            gh pr merge ${PR_NUMBER} --merge
-            MERGE_EXIT_CODE=$?
-            set -e
-
-            if [ ${MERGE_EXIT_CODE} -eq 0 ]; then
-              MESSAGE="✅ ${NEXT_BRANCH} へのカスケードマージに成功しました。 #${PR_NUMBER}"
-              gh pr comment $ORIGINAL_PR --body "${MESSAGE}"
-            else
-              MESSAGE="❌ ${NEXT_BRANCH} への自動マージに失敗しました。手動でマージしてください。 #${PR_NUMBER}"
-              gh pr comment $ORIGINAL_PR --body "${MESSAGE}"
-              exit 1
-            fi
-
-            CURRENT_BRANCH=${NEXT_BRANCH}
-          done
-
-          gh pr comment ${ORIGINAL_PR} --body "✅ カスケードマージが完了しました。"
+          script: |
+            const { main } = await import('${{ github.workspace }}/.github/workflows/cascade.ts')
+            await main({
+              github,
+              context,
+              core,
+              currentBranch: '${{ github.base_ref }}',
+              originalPrNumber: ${{ github.event.pull_request.number }}
+            })
 
