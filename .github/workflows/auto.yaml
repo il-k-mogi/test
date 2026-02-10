@@ -127,9 +127,32 @@ jobs:
           # 5. PRを作成
           echo "Creating PR from $CURRENT_BRANCH to $NEXT_BRANCH..."
           
-          gh pr create \
+          PR_NUMBER=$(gh pr create \
             --base "$NEXT_BRANCH" \
             --head "$CURRENT_BRANCH" \
             --title "Cascade Merge: $CURRENT_BRANCH -> $NEXT_BRANCH" \
-            --body "This is an automated cascade merge PR triggered by a push to $CURRENT_BRANCH."
+            --body "This is an automated cascade merge PR triggered by a push to $CURRENT_BRANCH." \
+            --json number \
+            --jq '.number'
+          )
+
+          # もとになった PR
+          ORIGINAL_PR=$(gh pr list --base "$CURRENT_BRANCH" --state merged --limit 1 --json number --jq '.[0].number')
+
+          # 3. マージを試行 (set +e で失敗してもスクリプトを続行させる)
+          set +e
+          gh pr merge $PR_NUMBER --merge --auto
+          MERGE_EXIT_CODE=$?
+          set -e
+
+          # 4. 結果に応じてコメントを投稿
+          if [ $MERGE_EXIT_CODE -eq 0 ]; then
+            # 成功時
+            MESSAGE="✅ $NEXT_BRANCH へのカスケードマージに成功しました。 #${PR_NUMBER}"
+            gh pr comment $ORIGINAL_PR --body "${MESSAGE}"
+          else
+            # 失敗時 (コンフリクトなど)
+            MESSAGE="❌ $NEXT_BRANCH への自動マージに失敗しました。手動でマージしてください。 #${PR_NUMBER}"
+            gh pr comment $ORIGINAL_PR --body "${MESSAGE}"
+          fi
 # --label "cascade-merge"
