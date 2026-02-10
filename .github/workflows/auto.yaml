@@ -127,15 +127,15 @@ jobs:
           # 5. PRを作成
           echo "Creating PR from $CURRENT_BRANCH to $NEXT_BRANCH..."
           
-          PR_NUMBER=$(gh pr create \
+          gh pr create \
             --base "$NEXT_BRANCH" \
             --head "$CURRENT_BRANCH" \
             --title "Cascade Merge: $CURRENT_BRANCH -> $NEXT_BRANCH" \
-            --body "This is an automated cascade merge PR triggered by a push to $CURRENT_BRANCH." \
-            --json number \
-            --jq '.number'
-          )
+            --body "This is an automated cascade merge PR triggered by a push to $CURRENT_BRANCH."
 
+          # 作った PR
+          PR_NUMBER=$(gh pr list --base "$NEXT_BRANCH" --head "$CURRENT_BRANCH" --limit 1 --json number --jq '.[0].number')
+          
           # もとになった PR
           ORIGINAL_PR=$(gh pr list --base "$CURRENT_BRANCH" --state merged --limit 1 --json number --jq '.[0].number')
 
