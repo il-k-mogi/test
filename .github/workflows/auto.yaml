@@ -148,7 +148,7 @@ jobs:
 
             # 3. マージを試行 (set +e で失敗してもスクリプトを続行させる)
             set +e
-# gh pr merge $PR_NUMBER --merge --auto
+            # gh pr merge $PR_NUMBER --merge --auto
             # auto-merge 設定がリポジトリにされているので --auto は付けない
             gh pr merge $PR_NUMBER --merge
             MERGE_EXIT_CODE=$?
