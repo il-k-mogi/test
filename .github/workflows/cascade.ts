@@ -16,7 +16,14 @@ type Args = {
 const compareVersions = (a: string, b: string): number => {
   const parseVersion = (v: string) => {
     const match = v.replace('release/v', '').match(/^(\d+)\.(\d+)\.(\d+)(?:-p(\d+))?$/)
-    if (!match) return { major: 0, minor: 0, patch: 0, suffix: 0 }
+
+    if (!match) return {
+      major: 0,
+      minor: 0,
+      patch: 0,
+      suffix: 0
+    }
+
     return {
       major: Number(match[1]),
       minor: Number(match[2]),
@@ -28,19 +35,28 @@ const compareVersions = (a: string, b: string): number => {
   const vA = parseVersion(a)
   const vB = parseVersion(b)
 
-  if (vA.major !== vB.major) return vA.major - vB.major
-  if (vA.minor !== vB.minor) return vA.minor - vB.minor
-  if (vA.patch !== vB.patch) return vA.patch - vB.patch
+  if (vA.major !== vB.major) {
+    return vA.major - vB.major
+  }
+
+  if (vA.minor !== vB.minor) {
+    return vA.minor - vB.minor
+  }
+
+  if (vA.patch !== vB.patch) {
+    return vA.patch - vB.patch
+  }
+
   return vA.suffix - vB.suffix
 }
 
 const main = async ({ github, context, core, currentBranch, originalPrNumber }: Args) => {
   const { owner, repo } = context.repo
 
-  const { data: allBranches } = await github.rest.repos.listBranches({
+  const allBranches = await github.paginate(github.rest.repos.listBranches, {
     owner,
     repo,
-    per_page: 100,
+    per_page: 2,
   })
 
   const releaseBranches = allBranches
