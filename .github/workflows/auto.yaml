@@ -71,6 +71,12 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+      
+    # PR がマージされて、マージ先が release/v から始まるブランチかつ処理ユーザーが bot ではない場合のみ動く
+    if: |
+      github.event.pull_request.merged == true
+      && startsWith(github.base_ref, 'release/v')
+      && github.actor != 'github-action[bot]'
 
     steps:
       - name: Checkout repository
@@ -94,65 +100,71 @@ jobs:
           # 配列に変換
           IFS=' ' read -r -a BRANCH_ARRAY <<< "$BRANCHES"
           
-          NEXT_BRANCH=""
+          NEXT_BRANCHES=()
           FOUND_CURRENT=false
 
           # 2. 現在のブランチの「次」にあるブランチを探す
           for BRANCH in "${BRANCH_ARRAY[@]}"; do
             if [ "$FOUND_CURRENT" = true ]; then
-              NEXT_BRANCH="$BRANCH"
-              break
-            fi
+              NEXT_BRANCHES+=("$BRANCH")
+                          fi
             if [ "$BRANCH" = "$CURRENT_BRANCH" ]; then
               FOUND_CURRENT=true
             fi
           done
 
           # 3. 次のブランチが見つからなければ終了（最新バージョンの場合など）
-          if [ -z "$NEXT_BRANCH" ]; then
+          if [ ${#NEXT_BRANCHES[@]} -eq 0 ]; then
             echo "No newer release branch found. Cascade complete."
             exit 0
           fi
 
-          echo "Next branch to merge into: $NEXT_BRANCH"
+          # もとになった PR
+          ORIGINAL_PR=$(gh pr list --base "$CURRENT_BRANCH" --state merged --limit 1 --json number --jq '.[0].number')
 
-          # 4. 既に同等のPRが存在するか確認 (二重作成防止)
-          EXISTING_PR=$(gh pr list --base "$NEXT_BRANCH" --head "$CURRENT_BRANCH" --state open --json url --jq '.[0].url')
-          
-          if [ -n "$EXISTING_PR" ]; then
-            echo "PR already exists: $EXISTING_PR"
-            exit 0
-          fi
+          # NEXT_BRANCH には次期リリースブランチが来る
+          for NEXT_BRANCH in "${NEXT_BRANCHES[@]}"; do
+            echo "Next branch to merge into: $NEXT_BRANCH"
 
-          # 5. PRを作成
-          echo "Creating PR from $CURRENT_BRANCH to $NEXT_BRANCH..."
-          
-          gh pr create \
+            # 4. 既に同等のPRが存在するか確認 (二重作成防止)
+            EXISTING_PR=$(gh pr list --base "$NEXT_BRANCH" --head "$CURRENT_BRANCH" --state open --json url --jq '.[0].url')
+            
+            if [ -n "$EXISTING_PR" ]; then
+              echo "PR already exists: $EXISTING_PR"
+              exit 0
+            fi
+
+            # 5. PRを作成
+            echo "Creating PR from $CURRENT_BRANCH to $NEXT_BRANCH..."
+
+            gh pr create \
             --base "$NEXT_BRANCH" \
             --head "$CURRENT_BRANCH" \
             --title "Cascade Merge: $CURRENT_BRANCH -> $NEXT_BRANCH" \
             --body "This is an automated cascade merge PR triggered by a push to $CURRENT_BRANCH."
 
-          # 作った PR
-          PR_NUMBER=$(gh pr list --base "$NEXT_BRANCH" --head "$CURRENT_BRANCH" --limit 1 --json number --jq '.[0].number')
-          
-          # もとになった PR
-          ORIGINAL_PR=$(gh pr list --base "$CURRENT_BRANCH" --state merged --limit 1 --json number --jq '.[0].number')
+            # 作った PR
+            PR_NUMBER=$(gh pr list --base "$NEXT_BRANCH" --head "$CURRENT_BRANCH" --limit 1 --json number --jq '.[0].number')
 
-          # 3. マージを試行 (set +e で失敗してもスクリプトを続行させる)
-          set +e
-          gh pr merge $PR_NUMBER --merge --auto
-          MERGE_EXIT_CODE=$?
-          set -e
+            # 3. マージを試行 (set +e で失敗してもスクリプトを続行させる)
+            set +e
+            gh pr merge $PR_NUMBER --merge --auto
+            MERGE_EXIT_CODE=$?
+            set -e
 
-          # 4. 結果に応じてコメントを投稿
-          if [ $MERGE_EXIT_CODE -eq 0 ]; then
-            # 成功時
-            MESSAGE="✅ $NEXT_BRANCH へのカスケードマージに成功しました。 #${PR_NUMBER}"
-            gh pr comment $ORIGINAL_PR --body "${MESSAGE}"
-          else
-            # 失敗時 (コンフリクトなど)
-            MESSAGE="❌ $NEXT_BRANCH への自動マージに失敗しました。手動でマージしてください。 #${PR_NUMBER}"
-            gh pr comment $ORIGINAL_PR --body "${MESSAGE}"
-          fi
+            # 4. 結果に応じてコメントを投稿
+            if [ $MERGE_EXIT_CODE -eq 0 ]; then
+              # 成功時
+              MESSAGE="✅ $NEXT_BRANCH へのカスケードマージに成功しました。 #${PR_NUMBER}"
+              gh pr comment $ORIGINAL_PR --body "${MESSAGE}"
+            else
+              # 失敗時 (コンフリクトなど)
+              MESSAGE="❌ $NEXT_BRANCH への自動マージに失敗しました。手動でマージしてください。 #${PR_NUMBER}"
+              gh pr comment $ORIGINAL_PR --body "${MESSAGE}"
+              exit 1
+            fi
+
+            # 次の処理でベースになるブランチを変える
+            CURRENT_BRANCH=$NEXT_BRANCH
+          done
 # --label "cascade-merge"
