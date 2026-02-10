@@ -46,7 +46,7 @@ jobs:
           NEXT_BRANCHES=()
           FOUND_CURRENT=false
 
-          for BRANCH in "${BRANCHES}"; do
+          for BRANCH in ${BRANCHES}; do
             if [ "${FOUND_CURRENT}" = true ]; then
               NEXT_BRANCHES+=("$BRANCH")
             fi
