@@ -167,4 +167,7 @@ jobs:
             # 次の処理でベースになるブランチを変える
             CURRENT_BRANCH=$NEXT_BRANCH
           done
-# --label "cascade-merge"
+
+          gh pr comment $ORIGINAL_PR --body "カスケードマージが完了しました。"
+          
+
