@@ -11,18 +11,27 @@ type Args = {
 
 /**
  * セマンティックバージョンでソートするための比較関数
- * release/v1.0.0 形式を想定
+ * release/v1.0.0 または release/v1.0.0-p1 形式を想定
  */
 const compareVersions = (a: string, b: string): number => {
-  const versionA = a.replace('release/v', '').split('.').map(Number)
-  const versionB = b.replace('release/v', '').split('.').map(Number)
-
-  for (let i = 0; i < Math.max(versionA.length, versionB.length); i++) {
-    const numA = versionA[i] ?? 0
-    const numB = versionB[i] ?? 0
-    if (numA !== numB) return numA - numB
+  const parseVersion = (v: string) => {
+    const match = v.replace('release/v', '').match(/^(\d+)\.(\d+)\.(\d+)(?:-p(\d+))?$/)
+    if (!match) return { major: 0, minor: 0, patch: 0, suffix: 0 }
+    return {
+      major: Number(match[1]),
+      minor: Number(match[2]),
+      patch: Number(match[3]),
+      suffix: match[4] ? Number(match[4]) : 0,
+    }
   }
-  return 0
+
+  const vA = parseVersion(a)
+  const vB = parseVersion(b)
+
+  if (vA.major !== vB.major) return vA.major - vB.major
+  if (vA.minor !== vB.minor) return vA.minor - vB.minor
+  if (vA.patch !== vB.patch) return vA.patch - vB.patch
+  return vA.suffix - vB.suffix
 }
 
 const main = async ({ github, context, core, currentBranch, originalPrNumber }: Args) => {
