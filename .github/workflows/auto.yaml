@@ -7,72 +7,20 @@ on:
     branches:
       - 'release/v*'
 
-# permissions:
-#   contents: write
-#   pull-requests: write
-#   issues: write
-
-# jobs:
-#   merge:
-#     name: Cascading Auto Merge
-#     runs-on: ubuntu-latest
-
-#     # PR がマージされて、マージ先が release/v から始まるブランチ
-#     if: |
-#       github.event.pull_request.merged == true
-#       && startsWith(github.base_ref, 'release/v')
-#       && github.actor != 'github-action[bot]'
-
-#     steps:
-#       - name: Automatic Merge
-#         uses: ActionsDesk/cascading-downstream-merge@v3.1.0
-#         with:
-#           github_token: ${{ secrets.GITHUB_TOKEN }}
-#           prefixes: release/v
-#           ref_branch: main
-
-# jobs:
-#   cascade:
-#     runs-on: ubuntu-latest
-#     steps:
-#       - name: Checkout
-#         uses: actions/checkout@v4
-#         with:
-#           fetch-depth: 0
-
-#       - name: Create PR to main and next release
-#         env:
-#           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-#         run: |
-#           CURRENT_BRANCH=${GITHUB_REF#refs/heads/}
-          
-#           # 1. mainへのマージPR作成
-#           gh pr create --base main --head $CURRENT_BRANCH \
-#             --title "chore: cascade merge $CURRENT_BRANCH to main" \
-#             --body "Automatic cascade merge from $CURRENT_BRANCH" || echo "PR to main already exists or failed"
-
-#           # 2. 次のリリースブランチを特定
-#           # 全てのリリースブランチを取得してバージョン順にソート
-#           NEXT_BRANCH=$(git branch -r | grep 'origin/release/v' | sed 's/  origin\///' | sort -V | sed -n "/^$CURRENT_BRANCH$/{n;p;}")
-
-#           if [ -n "$NEXT_BRANCH" ]; then
-#             echo "Next branch is $NEXT_BRANCH. Creating PR..."
-#             gh pr create --base $NEXT_BRANCH --head $CURRENT_BRANCH \
-#               --title "chore: cascade merge $CURRENT_BRANCH to $NEXT_BRANCH" \
-#               --body "Automatic cascade merge from $CURRENT_BRANCH to $NEXT_BRANCH" || echo "PR to $NEXT_BRANCH already exists"
-#           else
-#             echo "No higher release branch found. Cascade ends here."
-#           fi
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
 
 jobs:
   cascade:
     runs-on: ubuntu-latest
-    
+
     permissions:
       contents: write
       pull-requests: write
-      
-    # PR がマージされて、マージ先が release/v から始まるブランチかつ処理ユーザーが bot ではない場合のみ動く
+
+    # bot のアクションにより処理が伝播することを防ぐために、bot 以外のマージで起動するようにする
     if: |
       github.event.pull_request.merged == true
       && startsWith(github.base_ref, 'release/v')
@@ -82,94 +30,75 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # すべてのブランチ情報を取得するために必要
+          fetch-depth: 0
 
       - name: Find next version branch and Create PR
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CURRENT_BRANCH: ${{ github.ref_name }}
         run: |
-          echo "Current branch: $CURRENT_BRANCH"
+          echo "現在のブランチ: ${CURRENT_BRANCH}"
 
-          # 1. リモートの release ブランチ一覧を取得し、バージョン順にソート
-          # (origin/release/ を削除してブランチ名のみにする)
-          BRANCHES=$(git branch -r | grep 'origin/release/' | sed 's/origin\///' | sort -V | xargs)
-          
-          echo "Detected release branches: $BRANCHES"
+          BRANCHES=$(git branch -r | grep 'origin/release/v' | sed 's/origin\///' | sort -V | xargs)
 
-          # 配列に変換
-          IFS=' ' read -r -a BRANCH_ARRAY <<< "$BRANCHES"
-          
+          echo "リリースブランチ一覧: ${BRANCHES}"
+
           NEXT_BRANCHES=()
           FOUND_CURRENT=false
 
-          # 2. 現在のブランチの「次」にあるブランチを探す
-          for BRANCH in "${BRANCH_ARRAY[@]}"; do
-            if [ "$FOUND_CURRENT" = true ]; then
+          for BRANCH in "${BRANCHES[@]}"; do
+            if [ "${FOUND_CURRENT}" = true ]; then
               NEXT_BRANCHES+=("$BRANCH")
-                          fi
-            if [ "$BRANCH" = "$CURRENT_BRANCH" ]; then
+            fi
+
+            if [ "${BRANCH}" = "${CURRENT_BRANCH}" ]; then
               FOUND_CURRENT=true
             fi
           done
 
-          # 3. 次のブランチが見つからなければ終了（最新バージョンの場合など）
           if [ ${#NEXT_BRANCHES[@]} -eq 0 ]; then
-            echo "No newer release branch found. Cascade complete."
+            echo "次期リリースブランチが見つかりませんでした。"
             exit 0
           fi
 
-          # もとになった PR
-          ORIGINAL_PR=$(gh pr list --base "$CURRENT_BRANCH" --state merged --limit 1 --json number --jq '.[0].number')
+          echo "カスケードマージ対象ブランチ: ${NEXT_BRANCHES}"
 
-          # NEXT_BRANCH には次期リリースブランチが来る
+          ORIGINAL_PR=$(gh pr list --base ${CURRENT_BRANCH} --state merged --limit 1 --json number --jq '.[0].number')
+
           for NEXT_BRANCH in "${NEXT_BRANCHES[@]}"; do
-            echo "Next branch to merge into: $NEXT_BRANCH"
+            EXISTING_PR=$(gh pr list --base ${NEXT_BRANCH} --head ${CURRENT_BRANCH} --state open --json url --jq '.[0].url')
 
-            # 4. 既に同等のPRが存在するか確認 (二重作成防止)
-            EXISTING_PR=$(gh pr list --base "$NEXT_BRANCH" --head "$CURRENT_BRANCH" --state open --json url --jq '.[0].url')
-            
-            if [ -n "$EXISTING_PR" ]; then
-              echo "PR already exists: $EXISTING_PR"
+            if [ -n "${EXISTING_PR}" ]; then
+              echo "PR が既に存在します: ${EXISTING_PR}"
               exit 0
             fi
 
-            # 5. PRを作成
-            echo "Creating PR from $CURRENT_BRANCH to $NEXT_BRANCH..."
+            echo "PR を作成します: ${CURRENT_BRANCH} -> ${NEXT_BRANCH}"
 
             gh pr create \
-            --base "$NEXT_BRANCH" \
-            --head "$CURRENT_BRANCH" \
-            --title "Cascade Merge: $CURRENT_BRANCH -> $NEXT_BRANCH" \
-            --body "This is an automated cascade merge PR triggered by a push to $CURRENT_BRANCH."
+              --base ${NEXT_BRANCH} \
+              --head ${CURRENT_BRANCH} \
+              --title "Cascade Merge: ${CURRENT_BRANCH} -> ${NEXT_BRANCH}" \
+              --body "This is an automated cascade merge PR triggered by a push to ${CURRENT_BRANCH}."
 
-            # 作った PR
-            PR_NUMBER=$(gh pr list --base "$NEXT_BRANCH" --head "$CURRENT_BRANCH" --limit 1 --json number --jq '.[0].number')
+            PR_NUMBER=$(gh pr list --base ${NEXT_BRANCH} --head ${CURRENT_BRANCH} --limit 1 --json number --jq '.[0].number')
 
-            # 3. マージを試行 (set +e で失敗してもスクリプトを続行させる)
             set +e
-            # gh pr merge $PR_NUMBER --merge --auto
-            # auto-merge 設定がリポジトリにされているので --auto は付けない
-            gh pr merge $PR_NUMBER --merge
+            gh pr merge ${PR_NUMBER} --merge
             MERGE_EXIT_CODE=$?
             set -e
 
-            # 4. 結果に応じてコメントを投稿
-            if [ $MERGE_EXIT_CODE -eq 0 ]; then
-              # 成功時
-              MESSAGE="✅ $NEXT_BRANCH へのカスケードマージに成功しました。 #${PR_NUMBER}"
+            if [ ${MERGE_EXIT_CODE} -eq 0 ]; then
+              MESSAGE="✅ ${NEXT_BRANCH} へのカスケードマージに成功しました。 #${PR_NUMBER}"
               gh pr comment $ORIGINAL_PR --body "${MESSAGE}"
             else
-              # 失敗時 (コンフリクトなど)
-              MESSAGE="❌ $NEXT_BRANCH への自動マージに失敗しました。手動でマージしてください。 #${PR_NUMBER}"
+              MESSAGE="❌ ${NEXT_BRANCH} への自動マージに失敗しました。手動でマージしてください。 #${PR_NUMBER}"
               gh pr comment $ORIGINAL_PR --body "${MESSAGE}"
               exit 1
             fi
 
-            # 次の処理でベースになるブランチを変える
-            CURRENT_BRANCH=$NEXT_BRANCH
+            CURRENT_BRANCH=${NEXT_BRANCH}
           done
 
-          gh pr comment $ORIGINAL_PR --body "カスケードマージが完了しました。"
-          
+          gh pr comment ${ORIGINAL_PR} --body "✅ カスケードマージが完了しました。"
 
