@@ -1,0 +1,12 @@
+name: Actions Sample
+
+on:
+  pull_request:
+
+jobs:
+  sample:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Echo
+        run: echo "実行！"
