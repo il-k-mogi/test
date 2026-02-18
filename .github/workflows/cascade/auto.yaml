@@ -34,7 +34,7 @@ jobs:
         uses: actions/github-script@v8
         with:
           script: |
-            const { main } = await import('${{ github.workspace }}/.github/workflows/cascade.ts')
+            const { main } = await import('${{ github.workspace }}/.github/workflows/cascade/index.ts')
             await main({
               github,
               context,
