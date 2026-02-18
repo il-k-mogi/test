@@ -4,8 +4,6 @@ on:
   pull_request:
     types:
       - closed
-    branches:
-      - 'release/v*'
 
 permissions:
   contents: write
@@ -13,12 +11,9 @@ permissions:
   issues: write
 
 jobs:
-  cascade:
+  merge:
+    name: Cascading Auto Merge
     runs-on: ubuntu-latest
-
-    permissions:
-      contents: write
-      pull-requests: write
 
     # bot のアクションにより処理が伝播することを防ぐために、bot 以外のマージで起動するようにする
     if: |
@@ -34,7 +29,8 @@ jobs:
         uses: actions/github-script@v8
         with:
           script: |
-            const { main } = await import('${{ github.workspace }}/.github/workflows/cascade/index.ts')
+            const { main } = await import('${{ github.workspace }}/.github/workflows/scripts/cascade.ts')
+
             await main({
               github,
               context,
