@@ -1,0 +1,13 @@
+name: Sleep action
+
+on:
+  pull_request:
+
+jobs:
+  sample:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Sleep
+        run: sleep 10
+        
