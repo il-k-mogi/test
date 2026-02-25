@@ -19,7 +19,7 @@ jobs:
     if: |
       github.event.pull_request.merged == true
       && startsWith(github.base_ref, 'release/v')
-      && github.actor != 'github-action[bot]'
+      && github.actor != 'github-actions[bot]'
 
     steps:
       - name: Checkout repository

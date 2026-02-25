@@ -10,17 +10,23 @@ type Args = {
 }
 
 /**
- * セマンティックバージョンでソートするための比較関数
- * release/v1.0.0 または release/v1.0.0-p1 形式を想定
+ * リリースブランチのソートを行う
+ *
+ * - release/v1.0.0
+ * - release/v1.0.0-p1
+ * - release/v1.0.0-p1.1
+ *
+ * のいずれかの形式に対応
  */
 const compareVersions = (a: string, b: string): number => {
   const parseVersion = (v: string) => {
-    const match = v.replace('release/v', '').match(/^(\d+)\.(\d+)\.(\d+)(?:-p(\d+))?$/)
+    const match = v.replace('release/v', '').match(/^(\d+)\.(\d+)\.(\d+)(?:-p(\d+)(?:\.(\d+))?)?$/)
 
     if (!match) return {
       major: 0,
       minor: 0,
       patch: 0,
+      hotfix: 0,
       suffix: 0
     }
 
@@ -28,7 +34,8 @@ const compareVersions = (a: string, b: string): number => {
       major: Number(match[1]),
       minor: Number(match[2]),
       patch: Number(match[3]),
-      suffix: match[4] ? Number(match[4]) : 0,
+      hotfix: match[4] ? Number(match[4]) : 0,
+      suffix: match[5] ? Number(match[5]) : 0,
     }
   }
 
@@ -47,6 +54,10 @@ const compareVersions = (a: string, b: string): number => {
     return vA.patch - vB.patch
   }
 
+  if (vA.hotfix !== vB.hotfix) {
+    return vA.hotfix - vB.hotfix
+  }
+
   return vA.suffix - vB.suffix
 }
 
@@ -56,7 +67,7 @@ const main = async ({ github, context, core, currentBranch, originalPrNumber }: 
   const allBranches = await github.paginate(github.rest.repos.listBranches, {
     owner,
     repo,
-    per_page: 2,
+    per_page: 100,
   })
 
   const releaseBranches = allBranches
