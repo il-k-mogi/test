@@ -1,0 +1,28 @@
+name: Set Milestone from Release Branch
+
+on:
+  pull_request:
+    types:
+      - opened
+      - reopened
+      - edited
+
+permissions:
+  pull-requests: write
+  issues: write
+
+jobs:
+  set-milestone:
+    runs-on: ubuntu-latest
+    # bot によるカスケードマージ PR は対象外
+    if: github.actor != 'github-actions[bot]'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set milestone
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        with:
+          script: |
+            const { main } = await import('${{ github.workspace }}/.github/workflows/scripts/set-milestone.ts')
+            await main({ github, context, core })
