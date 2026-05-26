@@ -19,6 +19,9 @@ const main = async ({ github, context, core }: Args): Promise<void> => {
   const baseBranch: string = pr.base.ref;
   const match = baseBranch.match(/^release\/(v.+)$/);
 
+
+
+
   if (!match) {
     core.info(`ベースブランチ '${baseBranch}' はリリースブランチではありません。スキップします。`);
     return;
