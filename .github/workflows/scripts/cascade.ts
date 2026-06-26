@@ -1,3 +1,4 @@
+import { Octokit } from '@octokit/rest'
 import type * as core from '@actions/core'
 import type * as github from '@actions/github'
 
@@ -7,6 +8,7 @@ type Args = {
   core: typeof core
   currentBranch: string
   originalPrNumber: number
+  token: string
 }
 
 /**
@@ -61,7 +63,8 @@ const compareVersions = (a: string, b: string): number => {
   return vA.suffix - vB.suffix
 }
 
-const main = async ({ github, context, core, currentBranch, originalPrNumber }: Args) => {
+const main = async ({ github, context, core, currentBranch, originalPrNumber, token }: Args) => {
+  const kit = new Octokit({ auth: token })
   const { owner, repo } = context.repo
 
   const allBranches = await github.paginate(github.rest.repos.listBranches, {
@@ -103,7 +106,7 @@ const main = async ({ github, context, core, currentBranch, originalPrNumber }: 
 
     core.info(`PR を作成します: ${headBranch} -> ${baseBranch}`)
 
-    const { data: newPr } = await github.rest.pulls.create({
+    const { data: newPr } = await kit.rest.pulls.create({
       owner,
       repo,
       base: baseBranch,
@@ -113,21 +116,21 @@ const main = async ({ github, context, core, currentBranch, originalPrNumber }: 
     })
 
     try {
-      await github.rest.pulls.merge({
+      await kit.rest.pulls.merge({
         owner,
         repo,
         pull_number: newPr.number,
         merge_method: 'merge',
       })
 
-      await github.rest.issues.createComment({
+      await kit.rest.issues.createComment({
         owner,
         repo,
         issue_number: originalPrNumber,
         body: `✅ ${baseBranch} へのカスケードマージに成功しました。 #${newPr.number}`,
       })
     } catch (error) {
-      await github.rest.issues.createComment({
+      await kit.rest.issues.createComment({
         owner,
         repo,
         issue_number: originalPrNumber,
@@ -143,7 +146,7 @@ const main = async ({ github, context, core, currentBranch, originalPrNumber }: 
     Promise.resolve(currentBranch),
   )
 
-  await github.rest.issues.createComment({
+  await kit.rest.issues.createComment({
     owner,
     repo,
     issue_number: originalPrNumber,
